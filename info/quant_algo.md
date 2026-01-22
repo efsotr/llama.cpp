@@ -4,7 +4,7 @@
 
 ## 4-bit 对称量化（Q4_0）
 
-算法对每个固定长度块（`QK4_0`）寻找绝对值最大元素，生成尺度 `d = max / -8`，再将值按 `x * (1/d) + 8.5` 取整裁剪到 4 bit，低高 4 位分别写入同一字节。伪代码：
+算法对每个固定长度块（`QK4_0`）寻找绝对值最大元素及其有符号值 `max_val`，生成尺度 `d = max_val / -8`（实现中使用有符号最大值，因此若直接取绝对值应写作 `d = ±amax / 8`），再将值按 `x * (1/d) + 8.5` 取整裁剪到 4 bit，低高 4 位分别写入同一字节。伪代码：
 
 ```
 for block in chunks(x, QK4_0):
@@ -18,11 +18,11 @@ for block in chunks(x, QK4_0):
     store_scale(d)
 ```
 
-引用：`ggml/src/ggml-quants.c#36-69`
+引用：`ggml/src/ggml-quants.c#36-71`
 
 ## 4-bit 带偏移量化（Q4_1）
 
-对块内求 `min` 与 `max`，步长 `d = (max - min) / 15`，以 `(x - min) / d` 量化并存储偏移 `min`。伪代码：
+对块内求 `min` 与 `max`，步长 `d = (max - min) / 15`（若用绝对最大值表示可写作 `d = (max_val) / 16` 但实现以 min/max 直接计算），以 `(x - min) / d` 量化并存储偏移 `min`。伪代码：
 
 ```
 for block in chunks(x, QK4_1):
