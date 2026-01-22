@@ -4,7 +4,7 @@
 
 ## 4-bit 对称量化（Q4_0）
 
-算法对每个固定长度块（`QK4_0`）寻找绝对值最大元素及其有符号值 `max_val`，生成尺度 `d = max_val / -8`（实现中使用有符号最大值，因此若直接取绝对值应写作 `d = ±amax / 8`），再将值按 `x * (1/d) + 8.5` 取整裁剪到 4 bit，低高 4 位分别写入同一字节。伪代码：
+算法对每个固定长度块（`QK4_0`）寻找绝对值最大元素及其有符号值 `max_val`，生成尺度 `d = max_val / -8`，再将值按 `x * (1/d) + 8.5` 取整裁剪到 4 bit，低高 4 位分别写入同一字节。伪代码：
 
 ```
 for block in chunks(x, QK4_0):
@@ -12,8 +12,8 @@ for block in chunks(x, QK4_0):
     d = max_val / -8
     id = 1 / d
     for j in 0..QK4_0/2-1:
-        xi0 = clamp(int(block[j]   * id + 8.5), 0, 15)
-        xi1 = clamp(int(block[j+QK4_0/2] * id + 8.5), 0, 15)
+        xi0 = clamp(int(block[j]             * id + 8.5), 0, 15)
+        xi1 = clamp(int(block[QK4_0/2 + j]   * id + 8.5), 0, 15)
         pack_4bit(xi0, xi1)
     store_scale(d)
 ```
@@ -22,7 +22,7 @@ for block in chunks(x, QK4_0):
 
 ## 4-bit 带偏移量化（Q4_1）
 
-对块内求 `min` 与 `max`，步长 `d = (max - min) / 15`（若用绝对最大值表示可写作 `d = (max_val) / 16` 但实现以 min/max 直接计算），以 `(x - min) / d` 量化并存储偏移 `min`。伪代码：
+对块内求 `min` 与 `max`，步长 `d = (max - min) / 15`，以 `(x - min) / d` 量化并存储偏移 `min`。伪代码：
 
 ```
 for block in chunks(x, QK4_1):
@@ -48,8 +48,8 @@ for block in chunks(x, QK5):
     d = max_val / -16
     id = 1 / d
     for j in 0..QK5/2-1:
-        xi0 = clamp(int(block[j]   * id + 16.5), 0, 31)
-        xi1 = clamp(int(block[j+QK5/2] * id + 16.5), 0, 31)
+        xi0 = clamp(int(block[j]           * id + 16.5), 0, 31)  // 使用有符号 max_val 求得的 d
+        xi1 = clamp(int(block[QK5/2 + j]   * id + 16.5), 0, 31)
         qs[j]  = low4(xi0) | (low4(xi1) << 4)
         qh    |= bit5(xi0) at pos j | bit5(xi1) at pos j+QK5/2
     store_scale(d), store_qh(qh) [, store_min for Q5_1]
@@ -64,7 +64,7 @@ Q8_0 以块内绝对值最大值求尺度 `d = amax / 127`，直接将 `x * (1/d
 ```
 for block in chunks(x, QK8):
     amax = max_abs(block)
-    d = amax / 127
+    d = amax / ((1 << 7) - 1)
     id = 1 / d
     sum = 0
     for j in 0..QK8-1:
