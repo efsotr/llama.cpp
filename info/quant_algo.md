@@ -51,7 +51,7 @@ for block in chunks(x, QK5):
         xi0 = clamp(int(block[j]           * id + 16.5), 0, 31)  // 使用有符号 max_val 求得的 d
         xi1 = clamp(int(block[QK5/2 + j]   * id + 16.5), 0, 31)
         qs[j]  = low4(xi0) | (low4(xi1) << 4)
-        qh    |= bit5(xi0) at pos j | bit5(xi1) at pos j+QK5/2
+        qh    |= (bit5(xi0) << j) | (bit5(xi1) << (j + QK5/2))
     store_scale(d), store_qh(qh) [, store_min for Q5_1]
 ```
 
@@ -84,9 +84,10 @@ K-quant 在超块（`QK_K`）内按 32 子块分别求带权尺度与最小值�
 ```
 for superblock in chunks(x, QK_K):
     for each 32-lane subblock:
-        weights = mean_abs(subblock) + abs(subblock)
-        scale, min = weighted_quantize(subblock, weights)
-        record scale, min, quantized L
+        w_mean = mean(abs(subblock))
+        weights = w_mean + abs(subblock)          // 标量与逐元素和，得到每元素权重
+        scale, min, L = weighted_quantize(subblock, weights) // L 为量化后 4bit/多 bit 符号数组
+        record scale, min, L
         track max_scale, max_min
     inv_scale = 63 / max_scale
     inv_min   = 63 / max_min
